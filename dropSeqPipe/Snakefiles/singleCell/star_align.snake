@@ -1,11 +1,17 @@
+import warnings
+from rpy2.rinterface import RRuntimeWarning
+warnings.filterwarnings("ignore", category=RRuntimeWarning)
 import gzip
 from itertools import islice
 """Align the data with STAR."""
 
+def myfunc(wildcards):
+    return ','.join(['{}.Log.final.out'.format(i) for i in wildcards])
+
 def get_mean_read_length(wildcards):
 	total_length = 0
 	n = 1000000
-	with gzip.open(wildcards + '_tagged_unmapped.fastq.gz' , 'r') as reads:
+	with gzip.open(wildcards + '_tagged_unmapped_trimmed.fastq.gz' , 'r') as reads:
 		fourthlines = islice(reads, 1, n, 4)
 		for line in fourthlines:
 			read = line.strip()
@@ -23,12 +29,16 @@ GTF = config['GTF']
 MISMATCH = config['GLOBAL']['allowed_aligner_mismatch']
 
 rule all:
-	input: expand('{sample}.Aligned.sam', sample=config['Samples'])
+	input: 
+		expand('{sample}.Aligned_sorted.bam', sample=config['Samples']),
+		'plots/STAR_Log_Stat.pdf'
 
 
 rule STAR_align:
-	input:  '{sample}_tagged_unmapped.fastq.gz'
-	output: sam = 'logs/{sample}.Aligned.out.sam'
+	input:  '{sample}_tagged_unmapped_trimmed.fastq.gz'
+	output:
+		sam = 'logs/{sample}.Aligned.sortedByCoord.out.bam',
+		log_out = 'logs/{sample}.Log.final.out'
 	params:
 		prefix = '{sample}.',
 		mismatch = MISMATCH,
@@ -42,12 +52,15 @@ rule STAR_align:
 			--readFilesIn {input}\
 			--outFileNamePrefix logs/{params.prefix}\
 			--sjdbOverhang {params.mean_read_length}\
-			--twopassMode Basic\
-			--outFilterScoreMinOverLread 0.3\
-			--outFilterMatchNminOverLread 0\
-			--outFilterMismatchNoverLmax 0.3"""
+			--outSAMtype BAM SortedByCoordinate"""
 
 rule mv_sam:
-	input: 'logs/{sample}.Aligned.out.sam'
-	output: '{sample}.Aligned.sam'
+	input: 'logs/{sample}.Aligned.sortedByCoord.out.bam'
+	output: '{sample}.Aligned_sorted.bam'
 	shell:"""mv {input} {output}"""
+
+rule plot_STAR_mappings:
+	input: expand('logs/{Samples}.Log.final.out', Samples = config['Samples'])
+	output: 'plots/STAR_Log_Stat.pdf'
+	script:
+		'../../Rscripts/plot_STAR_logs.R'

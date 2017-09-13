@@ -1,3 +1,6 @@
+import warnings
+from rpy2.rinterface import RRuntimeWarning
+warnings.filterwarnings("ignore", category=RRuntimeWarning)
 """Generate fastqc reports."""
 
 
@@ -10,7 +13,10 @@ FASTQC = config['FASTQCEXEC']
 
 
 rule all:
-	input: expand('logs/{sample}_R1_fastqc.html', sample=config['Samples'])
+	input:
+		expand('logs/{sample}_R1_fastqc.html', sample=config['Samples']),
+		'plots/fastqc.pdf',
+		'summary/fastqc.txt'
 
 rule fastqc:
 	"""Create fastqc report"""
@@ -21,3 +27,10 @@ rule fastqc:
 	threads: 2
 	shell:
 		"""{FASTQC} {input.r1} {input.r2} -t 2 -o logs --extract"""
+rule plot_fastqc:
+	input: expand('logs/{Samples}_R1_fastqc.html', Samples = config['Samples'])
+	output:
+		pdf = 'plots/fastqc.pdf',
+		txt = 'summary/fastqc.txt'
+	script:
+		"../../Rscripts/fastqc.R"

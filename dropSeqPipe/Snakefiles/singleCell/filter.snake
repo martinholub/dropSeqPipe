@@ -1,0 +1,191 @@
+import os
+import warnings
+from rpy2.rinterface import RRuntimeWarning
+warnings.filterwarnings("ignore", category=RRuntimeWarning)
+"""Generate pre alignement steps."""
+
+# Configfile
+configfile: 'config.yaml'
+
+# Executables
+TMPDIR = config['TMPDIR']
+PICARD = config['PICARD']
+DROPSEQ = config['DROPSEQ']
+TRIMEXEC = config['TRIMEXEC']
+CORES = config['CORES']
+ILLUMINACLIP = config['ILLUMINACLIP']
+starttrim_length = config['GLOBAL']['Cell_barcode']['end'] - config['GLOBAL']['Cell_barcode']['start'] + 1
+
+
+
+rule all:
+	input:
+		expand('{sample}_tagged_unmapped_trimmed.fastq.gz', sample=config['Samples']),
+		expand('plots/{sample}_polya_trimmed.pdf', sample=config['Samples']),
+		expand('plots/{sample}_start_trim.pdf', sample=config['Samples']),
+		expand('plots/{sample}_CELL_dropped.pdf', sample=config['Samples']),
+		expand('plots/{sample}_UMI_dropped.pdf', sample=config['Samples']),
+		'plots/BC_drop.pdf'
+
+# rule trimming_before:
+# 	input: 
+# 		r1='{sample}_R1.fastq.gz',
+# 		r2='{sample}_R2.fastq.gz'
+# 	output:
+# 		r1=temp('{sample}_R1_trimmed.fastq.gz'),
+# 		r2=temp('{sample}_R2_trimmed.fastq.gz'),
+# 		r1_short = 'logs/{sample}_R1_short.fastq.gz',
+# 		r2_short = 'logs/{sample}_R2_short.fastq.gz',
+# 	params:
+# 		SmartAdapter = config['GLOBAL']['5PrimeSmartAdapter'],
+# 		logfile = 'logs/{sample}.cutadapt.log',
+# 		min_read_length = config['GLOBAL']['UMI']['end'],
+# 		adapter_min_overlap = starttrim_length
+# 	threads: 1
+# 	shell:
+# 		"""cutadapt -O 5 -g {params.SmartAdapter} --minimum-length {params.min_read_length} --too-short-output {output.r1_short} --too-short-paired-output {output.r2_short} -o {output.r1} -p {output.r2} {input.r1} {input.r2} > {params.logfile}"""
+
+rule fastq_to_sam:
+	"""Create an empty bam file linking cell/UMI barcodes to reads"""
+	input:
+		r1='{sample}_R1.fastq.gz',
+		r2='{sample}_R2.fastq.gz'
+	output:
+		temp('{sample}_unaligned.bam')
+	threads: 1
+	shell:
+		"""java -Djava.io.tmpdir={TMPDIR} -Xmx512m -jar {PICARD} FastqToSam\
+		F1={input.r1}\
+		F2={input.r2}\
+		SM=DS O={output}"""
+
+rule stage1:
+	input: '{sample}_unaligned.bam'
+	output: 
+		bam = '{sample}_tagged_unmapped.bam',
+		BC_summary = 'logs/{sample}_CELL_barcode.txt',
+		UMI_summary = 'logs/{sample}_UMI_barcode.txt',
+		start_trim = 'logs/{sample}_start_trim.txt',
+		polyA_trim = 'logs/{sample}_polyA_trim.txt'
+	params:
+		BC_start = config['GLOBAL']['Cell_barcode']['start'],
+		BC_end = config['GLOBAL']['Cell_barcode']['end'],
+		BC_min_quality = config['GLOBAL']['Cell_barcode']['min_quality'],
+		BC_min_quality_num = config['GLOBAL']['Cell_barcode']['num_below_quality'],
+		UMI_start = config['GLOBAL']['UMI']['start'],
+		UMI_end = config['GLOBAL']['UMI']['end'],
+		UMI_min_quality = config['GLOBAL']['UMI']['min_quality'],
+		UMI_min_quality_num = config['GLOBAL']['UMI']['num_below_quality'],
+		SmartAdapter = config['GLOBAL']['5PrimeSmartAdapter']
+	threads: 4
+	shell:
+		"""{DROPSEQ}/TagBamWithReadSequenceExtended\
+		SUMMARY={output.BC_summary}\
+		BASE_RANGE={params.BC_start}-{params.BC_end}\
+		BASE_QUALITY={params.BC_min_quality}\
+		BARCODED_READ=1\
+		DISCARD_READ=false\
+		TAG_NAME=XC\
+		NUM_BASES_BELOW_QUALITY={params.BC_min_quality_num}\
+		INPUT={input}\
+		OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 |\
+		\
+		{DROPSEQ}/TagBamWithReadSequenceExtended\
+		SUMMARY={output.UMI_summary}\
+		BASE_RANGE={params.UMI_start}-{params.UMI_end}\
+		BASE_QUALITY={params.UMI_min_quality}\
+		BARCODED_READ=1\
+		DISCARD_READ=true\
+		TAG_NAME=XM\
+		NUM_BASES_BELOW_QUALITY={params.UMI_min_quality_num}\
+		INPUT=/dev/stdin\
+		OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 |\
+		\
+		{DROPSEQ}/FilterBAM TAG_REJECT=XQ\
+		INPUT=/dev/stdin\
+		OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 |\
+		\
+		{DROPSEQ}/TrimStartingSequence\
+		OUTPUT_SUMMARY={output.start_trim}\
+		SEQUENCE={params.SmartAdapter}\
+		MISMATCHES=0\
+		NUM_BASES=5\
+		INPUT=/dev/stdin\
+		OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 |\
+		\
+		{DROPSEQ}/PolyATrimmer\
+		OUTPUT_SUMMARY={output.polyA_trim}\
+		MISMATCHES=0\
+		NUM_BASES=6\
+		OUTPUT={output.bam}\
+		INPUT=/dev/stdin"""
+
+rule sam_to_fastq:
+	input: '{sample}_tagged_unmapped.bam'
+	output: '{sample}_tagged_unmapped.fastq.gz'
+	shell:
+		"""java -Xmx500m -jar -Djava.io.tmpdir={TMPDIR}	{PICARD} SamToFastq\
+		INPUT={input}\
+		FASTQ=/dev/stdout COMPRESSION_LEVEL=0|\
+		gzip > {output}"""
+
+rule trim_single:
+    input: '{sample}_tagged_unmapped.fastq.gz'
+    output:
+        trimmed = '{sample}_tagged_unmapped_trimmed.fastq.gz',
+        log = temp('logs/{sample}_trimlog.txt')
+    threads: CORES
+    shell:
+        """java -Djava.io.tmpdir={TMPDIR} -jar {TRIMEXEC}\
+        SE {input} {output.trimmed}\
+        -threads {CORES}\
+        ILLUMINACLIP:{ILLUMINACLIP}:2:30:10\
+        LEADING:3\
+        TRAILING:3\
+        SLIDINGWINDOW:4:15\
+        MINLEN:15 > {output.log} 2>&1"""
+
+rule plot_poly_trim:
+	input: 'logs/{sample}_polyA_trim.txt'
+	output: 'plots/{sample}_polya_trimmed.pdf'
+	script:
+		'../../Rscripts/singleCell/plot_polyA_trim.R'
+
+rule plot_barcode_start_trim:
+	input: 'logs/{sample}_start_trim.txt'
+	output: 'plots/{sample}_start_trim.pdf'
+	script:
+		'../../Rscripts/singleCell/plot_start_trim.R'
+
+
+rule plot_UMI_filtering:
+	input: 'logs/{sample}_UMI_barcode.txt'
+	output: 'plots/{sample}_UMI_dropped.pdf'
+	params: 
+		min_num_below = config['GLOBAL']['UMI']['num_below_quality']
+	script:
+		'../../Rscripts/singleCell/plot_umi_drop.R'
+
+rule plot_CELL_filtering:
+	input: 'logs/{sample}_CELL_barcode.txt'
+	output: 'plots/{sample}_CELL_dropped.pdf'
+	params:
+		min_num_below = config['GLOBAL']['Cell_barcode']['num_below_quality']
+	script:
+		'../../Rscripts/singleCell/plot_cell_drop.R'
+
+rule plot_BC_drop:
+	input:
+		Cell_barcode = expand('logs/{Samples}_CELL_barcode.txt', Samples=config['Samples']),
+		UMI = expand('logs/{Samples}_UMI_barcode.txt', Samples=config['Samples']),
+		fastqc_txt = 'summary/fastqc.txt'
+	output: 'plots/BC_drop.pdf'
+	params:
+		BC_length = config['GLOBAL']['Cell_barcode']['end'] - config['GLOBAL']['Cell_barcode']['start']+1,
+		UMI_length = config['GLOBAL']['UMI']['end'] - config['GLOBAL']['UMI']['start']+1,
+		min_num_below_BC = config['GLOBAL']['Cell_barcode']['num_below_quality'],
+		min_num_below_UMI = config['GLOBAL']['UMI']['num_below_quality'],
+		min_BC_quality = config['GLOBAL']['Cell_barcode']['min_quality'],
+		min_UMI_quality = config['GLOBAL']['UMI']['min_quality']
+	script:
+		'../../Rscripts/singleCell/plot_BC_drop.R'

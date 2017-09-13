@@ -1,0 +1,16 @@
+library(ggplot2)
+library(ggpubr)
+data = read.table(file = snakemake@input[[1]], header=T, stringsAsFactors=F)
+data = data[-1,]#take 0 low quality out
+data$presence=rep('kept', nrow(data))
+ids = which(snakemake@params$min_num_below < data$num_failed_bases)
+data$presence[ids] = 'dropped'
+dropped = sum(data$num_barcodes[ids])
+p = ggplot(data, aes(x=num_failed_bases, y=num_barcodes, fill = presence))
+p = p + geom_bar(stat = 'identity')
+p = p + ggtitle(paste('Number of CELL barcode bases under', snakemake@params$min_num_below,'quality in\n', snakemake@wildcards$sample,'\nDropped', format(dropped, big.mark = '\''),'Reads'))
+p = p + labs(x='Num of failed bases', y='Counts')
+p = p + theme_pubr(legend = 'bottom')
+p = p + scale_x_continuous(breaks = c(data$num_failed_bases), labels = factor(data$num_failed_bases))
+p = p + geom_vline(aes(xintercept = snakemake@params$min_num_below + 0.5), color = 'red')
+ggsave(plot = p, snakemake@output[[1]], height = 4, width = 6)

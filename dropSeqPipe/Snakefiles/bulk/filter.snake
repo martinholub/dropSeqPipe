@@ -23,6 +23,7 @@ rule trim_single:
     shell:
         """java -Djava.io.tmpdir={TMPDIR} -jar {TRIMEXEC}\
         SE {input} {output.R1}\
+        -threads {CORES}\
         ILLUMINACLIP:{ILLUMINACLIP}:2:30:10\
         LEADING:3\
         TRAILING:3\

@@ -24,8 +24,8 @@ def get_args():
     parser.add_argument('-m', '--mode',
                         help='Which mode to run.',
                         choices=[
-                            'pre-process',
-                            'generate-plots',
+                            'filter',
+                            'mapping',
                             'species-plot',
                             'extract-expression',
                             'fastqc',
@@ -98,29 +98,32 @@ def main():
     # First step is fastqc
     if("fastqc" in args.mode):
         print("Mode is fastqc.")
-        fastqc = 'snakemake -s {}/Snakefiles/{}/fastqc.snake --cores {} -pT -d {} --configfile {} {}'.format(
+        fastqc = 'snakemake -s {0}/Snakefiles/{1}/fastqc.snake --cores {2} -pT -d {3} --configfile {4} {5}'.format(
             scripts_dir,
             samples_yaml['GLOBAL']['data_type'],
             yaml_data['CORES'],
             args.folder_path,
             args.config_file_path,
             complementory_args)
-        fastqc_summary = 'Rscript {}/Rscripts/fastqc.R {}'.format(
-            package_dir,
-            args.folder_path)
+        # fastqc_summary = 'Rscript {}/Rscripts/fastqc.R {}'.format(
+        #     package_dir,
+        #     args.folder_path)
         print('Running fastqc')
         shell(fastqc)
-        shell(fastqc_summary)
-    # Second step is pre-processing which also does aligning and post processing
-    if("pre-process" in args.mode):
-        print("Mode is pre-processing.")
-        pre_align = 'snakemake -s {}/Snakefiles/{}/pre_align.snake --cores {} -pT -d {} --configfile {} {}'.format(
+        #shell(fastqc_summary)
+    # Second step is filtering which also does aligning and post processing
+    if("filter" in args.mode):
+        print("Mode is filtering.")
+        filter_mode = 'snakemake -s {}/Snakefiles/{}/filter.snake --cores {} -pT -d {} --configfile {} {}'.format(
             scripts_dir,
             samples_yaml['GLOBAL']['data_type'],
             yaml_data['CORES'],
             args.folder_path,
             args.config_file_path,
             complementory_args)
+        print('Running filtering')
+        shell(filter_mode)
+    if("mapping" in args.mode):
         star_align = 'snakemake -s {}/Snakefiles/{}/star_align.snake --cores {} -pT -d {} --configfile {} {}'.format(
             scripts_dir,
             samples_yaml['GLOBAL']['data_type'],
@@ -128,9 +131,6 @@ def main():
             args.folder_path,
             args.config_file_path,
             complementory_args)
-        star_summary = 'Rscript {}/Rscripts/STAR_log_plot.R {}'.format(
-            package_dir,
-            args.folder_path)
         post_align = 'snakemake -s {0}/Snakefiles/{1}/post_align.snake --cores {2} -pT -d {3} --configfile {4} {5}'.format(
             scripts_dir,
             samples_yaml['GLOBAL']['data_type'],
@@ -138,15 +138,8 @@ def main():
             args.folder_path,
             args.config_file_path,
             complementory_args)
-        print('Running pre-processing')
-        shell(pre_align)
         print('Running Alignement')
-        try:
-            shell(star_align)
-        except:
-            pass
-        print('Plotting STAR logs')
-        shell(star_summary)
+        shell(star_align)
         print('Running post-alignement')
         shell(post_align)
         if(samples_yaml['GLOBAL']['data_type'] == 'bulk'):
@@ -164,24 +157,24 @@ def main():
             complementory_args)
         print(test)
         shell(test)
-    if("generate-plots" in args.mode):
-        print('Mode is generate-plots')
-        if(samples_yaml['GLOBAL']['data_type'] == 'singleCell'):
-            knee_plot = 'Rscript {}/Rscripts/{}/knee_plot.R {}'.format(
-                package_dir,
-                samples_yaml['GLOBAL']['data_type'],
-                args.folder_path)
-            base_summary = 'Rscript {}/Rscripts/{}/rna_metrics.R {}'.format(
-                package_dir,
-                samples_yaml['GLOBAL']['data_type'],
-                args.folder_path)
-            print('Plotting knee plots')
-            shell(knee_plot)
-            print('Plotting base stats')
-            shell(base_summary)
-        multiqc = 'multiqc -o {0} {0}/logs {0}/summary --force'.format(args.folder_path)
-        print('Generating multiqc report')
-        shell(multiqc)
+    # if("generate-plots" in args.mode):
+    #     print('Mode is generate-plots')
+    #     if(samples_yaml['GLOBAL']['data_type'] == 'singleCell'):
+    #         knee_plot = 'Rscript {}/Rscripts/{}/knee_plot.R {}'.format(
+    #             package_dir,
+    #             samples_yaml['GLOBAL']['data_type'],
+    #             args.folder_path)
+    #         base_summary = 'Rscript {}/Rscripts/{}/rna_metrics.R {}'.format(
+    #             package_dir,
+    #             samples_yaml['GLOBAL']['data_type'],
+    #             args.folder_path)
+    #         print('Plotting knee plots')
+    #         shell(knee_plot)
+    #         print('Plotting base stats')
+    #         shell(base_summary)
+    #     multiqc = 'multiqc -o {0} {0}/logs {0}/summary --force'.format(args.folder_path)
+    #     print('Generating multiqc report')
+    #     shell(multiqc)
     if("species-plot" in args.mode):
         if(len(samples_yaml['SPECIES']) == 2):
             print('Mode is species-plots')

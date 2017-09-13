@@ -19,24 +19,25 @@ SPECIES = config["SPECIES"]
 
 
 rule all:
-	input: expand('logs/{sample}_hist_out_cell.txt', sample=config['Samples'])
-	log: 'logs/Dropseq_post_align.log'
-
-rule sort:
 	input:
-		samples = '{sample}.Aligned.sam'
-	output: temp('{sample}_Aligned_sorted.sam')
-	threads:1
-	shell:
-		"""java	-Djava.io.tmpdir={TMPDIR} -Dsamjdk.buffer_size=131072 -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -Xmx4000m -jar {PICARD} SortSam\
-		INPUT={input}\
-		OUTPUT={output}\
-		SORT_ORDER=queryname\
-		TMP_DIR={TMPDIR}"""
+		expand('logs/{sample}_hist_out_cell.txt', sample=config['Samples']),
+		expand('plots/{sample}_rna_metrics.pdf', sample=config['Samples'])
+
+# rule sort:
+# 	input:
+# 		samples = temp('{sample}.Aligned.sam')
+# 	output: temp('{sample}_Aligned_sorted.sam')
+# 	threads:1
+# 	shell:
+# 		"""java	-Djava.io.tmpdir={TMPDIR} -Dsamjdk.buffer_size=131072 -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -Xmx4000m -jar {PICARD} SortSam\
+# 		INPUT={input}\
+# 		OUTPUT={output}\
+# 		SORT_ORDER=queryname\
+# 		TMP_DIR={TMPDIR}"""
 
 rule stage3:
-	input:	unmapped = '{sample}_tagged_unmapped.bam',
-			mapped = '{sample}_Aligned_sorted.sam'
+	input:	unmapped = '{sample}_tagged_unmapped_trimmed.bam',
+			mapped = '{sample}.Aligned_sorted.bam'
 	output: temp('{sample}_gene_exon_tagged.bam')
 	threads: 2
 	shell:
@@ -58,24 +59,25 @@ rule stage3:
 
 rule bead_errors_metrics:
 	input: '{sample}_gene_exon_tagged.bam'
-	output: '{sample}_final.bam'
+	output:
+		bam = '{sample}_final.bam',
+		metrics = 'logs/{sample}_rna_metrics.txt'
 	params:
 		out_stats = 'logs/{sample}_synthesis_stats.txt',
 		summary = 'logs/{sample}_synthesis_stats_summary.txt',
 		barcodes = lambda wildcards: config['Samples'][wildcards.sample]['expected_cells'] * 2,
-		cells = lambda wildcards: config['Samples'][wildcards.sample]['expected_cells'],
-		metrics = 'logs/{sample}_rna_metrics.txt'
+		cells = lambda wildcards: config['Samples'][wildcards.sample]['expected_cells']
 	shell:
 		"""{DROPSEQ}/DetectBeadSynthesisErrors\
 		INPUT={input}\
-		OUTPUT={output}\
+		OUTPUT={output.bam}\
 		OUTPUT_STATS={params.out_stats}\
 		SUMMARY={params.summary}\
 		NUM_BARCODES={params.barcodes}\
 		PRIMER_SEQUENCE=AAGCAGTGGTATCAACGCAGAGTAC;
 		{DROPSEQ}/SingleCellRnaSeqMetricsCollector\
 		INPUT={input}\
-		OUTPUT={params.metrics}\
+		OUTPUT={output.metrics}\
 		ANNOTATIONS_FILE={REFFLAT}\
 		NUM_CORE_BARCODES={params.cells}\
 		RIBOSOMAL_INTERVALS={RRNAINTERVALS}
@@ -90,3 +92,12 @@ rule bam_hist:
 		O={output}\
 		TAG=XC
 		"""
+
+rule plot_rna_metrics:
+	input: 'logs/{sample}_rna_metrics.txt'
+	output: 'plots/{sample}_rna_metrics.pdf'
+	params: 
+		cells = lambda wildcards: config['Samples'][wildcards.sample]['expected_cells']
+	script:
+		'../../Rscripts/singleCell/plot_rna_metrics.R'
+

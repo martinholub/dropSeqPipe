@@ -8,11 +8,8 @@ library(grid)
 library(plyr)
 library(ggplot2)
 
-args = commandArgs(TRUE)
-folder_path = args[1]
-qc.folders = file.path(folder_path, 'logs')
-out.file = file.path(folder_path,'summary/fastqc')
-fastqc_plot = file.path(folder_path,'plots/fastqc.pdf')
+qc.folders = file.path('logs')
+fastqc_plot = file.path('plots/fastqc.pdf')
 
 #===============================================================================
 # FastQC DATA READ FUNCTIONS
@@ -222,4 +219,4 @@ dev.off()
 # Make the summary table
 f.txt <- ldply(full.list$summ)
 f.txt <- cast(f.txt, base ~ .id, value = "col.name")
-write.table(f.txt, file = paste(out.file,".txt", sep =""), sep = "\t", row.names = FALSE)
+write.table(f.txt, file = 'summary/fastqc.txt', sep = "\t", row.names = FALSE)

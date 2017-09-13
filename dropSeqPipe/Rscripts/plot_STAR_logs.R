@@ -4,10 +4,6 @@ library(ggplot2)
 library(reshape)
 library(gtable)
 library(grid)
-args = commandArgs(TRUE)
-folder_path = args[1]
-
-
 ######################################################################
 # process STAR Logs
 ######################################################################
@@ -106,9 +102,9 @@ plot.all <- function(x){
   upViewport()
 }
 
-data <- star.logs(file.path(folder_path, 'logs'))
-write.table(data, file = file.path(folder_path, "summary/STAR_Log_Stat.txt"), sep="\t", col.names=T, row.names=T, quote=F)
+data <- star.logs(file.path('logs'))
+write.table(data, file = file.path("summary/STAR_Log_Stat.txt"), sep="\t", col.names=T, row.names=T, quote=F)
 data$ID <- factor(row.names(data), levels = row.names(data))
-pdf(file.path(folder_path, "plots/STAR_Log_Stat.pdf"), height=12, width=13)
+pdf(file.path("plots/STAR_Log_Stat.pdf"), height=12, width=13)
 plot.all(data)
 dev.off()

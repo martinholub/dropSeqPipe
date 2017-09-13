@@ -13,7 +13,8 @@ MISMATCH = config['GLOBAL']['allowed_aligner_mismatch']
 ruleorder: STAR_align_paired > STAR_align_single
 
 rule all:
-	input: expand('{sample}.Aligned.bam', sample=config['Samples'])
+	input: expand('{sample}.Aligned.bam', sample=config['Samples']),
+	'plots/STAR_Log_Stat.pdf'
 	shell:"""{STAREXEC}\
 		--genomeDir {METAREF}\
 		--genomeLoad Remove;\
@@ -67,3 +68,8 @@ rule mv_sam:
 	params: prefix = '{sample}'
 	shell:"""mv {input} {output}; mv logs/{params.prefix}.ReadsPerGene.out.tab summary/{params.prefix}.ReadsPerGene.out.tab"""
 
+rule plot_STAR_mappings:
+	input: expand('logs/{Samples}.Log.final.out', Samples = config['Samples'])
+	output: 'plots/STAR_Log_Stat.pdf'
+	script:
+		'../../Rscripts/plot_STAR_logs.R'
