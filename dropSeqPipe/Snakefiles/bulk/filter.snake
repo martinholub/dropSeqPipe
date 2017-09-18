@@ -11,6 +11,7 @@ ILLUMINACLIP = config['ILLUMINACLIP']
 CORES = config['CORES']
 
 
+
 rule all:
     input: expand('logs/{sample}_trimmolog.txt', sample=config['Samples'])
 

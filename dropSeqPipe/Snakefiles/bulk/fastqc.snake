@@ -14,7 +14,10 @@ FASTQC = config['FASTQCEXEC']
 ruleorder: fastqc_paired > fastqc_single
 
 rule all:
-	input: expand('logs/{sample}_R1_fastqc.html', sample=config['Samples'])
+    input:
+        expand('logs/{sample}_R1_fastqc.html', sample=config['Samples']),
+        'plots/fastqc.pdf',
+        'summary/fastqc.txt'
 
 rule fastqc_single:
 	"""Create fastqc report"""
@@ -36,8 +39,11 @@ rule fastqc_paired:
     threads: 2
     shell:
         """{FASTQC} {input.R1} {input.R2} -t 2 -o logs --extract"""
+
 rule plot_fastqc:
-    input: expand('logs/{Samples}.Log.final.out', Samples = config['Samples'])
-    output: 'plots/fastqc.pdf'
+    input: expand('logs/{Samples}_R1_fastqc.html', Samples = config['Samples'])
+    output:
+        pdf = 'plots/fastqc.pdf',
+        txt = 'summary/fastqc.txt'
     script:
         "../../Rscripts/fastqc.R"
