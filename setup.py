@@ -34,7 +34,7 @@ class PostInstallCommand(install):
     
 
 setup(name='dropSeqPipe',
-      version='0.23a',
+      version='0.24',
       description='A drop-seq pipeline',
       keywords=['single cell', 'dropseq', 'drop-seq'],
       classifiers = [],
